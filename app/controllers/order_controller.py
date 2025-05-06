@@ -1,5 +1,5 @@
 from app.database.db_config import get_db
-from app.models.models import Order, MenuItem, order_item, Table
+from app.models.models import Order, MenuItem, OrderItem, Table
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
@@ -38,6 +38,30 @@ class OrderController:
             db.close()
     
     @staticmethod
+    def create_online_order(staff_id, customer_name=None, phone_number=None, order_type="Mang đi"):
+        """Tạo đơn hàng online không gắn với bàn cụ thể"""
+        db = get_db()
+        try:
+            # Create new order
+            new_order = Order(
+                staff_id=staff_id,
+                status="chờ xử lý",
+                order_time=datetime.now(),
+                note=f"Đơn hàng {order_type.lower()} - KH: {customer_name} - SĐT: {phone_number}"
+            )
+            
+            db.add(new_order)
+            db.commit()
+            db.refresh(new_order)
+            return new_order.id
+        except SQLAlchemyError as e:
+            db.rollback()
+            print(f"Database error: {e}")
+            return None
+        finally:
+            db.close()
+    
+    @staticmethod
     def add_item_to_order(order_id, menu_item_id, quantity=1, note=None):
         db = get_db()
         try:
@@ -52,28 +76,25 @@ class OrderController:
                 return False
             
             # Check if item is already in the order
-            stmt = order_item.select().where(
-                order_item.c.order_id == order_id,
-                order_item.c.menu_item_id == menu_item_id
-            )
-            existing_item = db.execute(stmt).first()
+            existing_item = db.query(OrderItem).filter(
+                OrderItem.order_id == order_id,
+                OrderItem.menu_item_id == menu_item_id
+            ).first()
             
             if existing_item:
                 # Update quantity
-                stmt = order_item.update().where(
-                    order_item.c.order_id == order_id,
-                    order_item.c.menu_item_id == menu_item_id
-                ).values(quantity=existing_item.quantity + quantity)
-                db.execute(stmt)
+                existing_item.quantity += quantity
+                existing_item.note = note
             else:
                 # Add new item
-                stmt = order_item.insert().values(
+                new_item = OrderItem(
                     order_id=order_id,
                     menu_item_id=menu_item_id,
                     quantity=quantity,
-                    note=note
+                    note=note,
+                    status="chờ pha chế"
                 )
-                db.execute(stmt)
+                db.add(new_item)
             
             # Update order total
             total = quantity * menu_item.price
@@ -104,11 +125,10 @@ class OrderController:
                 return False
             
             # Check if item is in the order
-            stmt = order_item.select().where(
-                order_item.c.order_id == order_id,
-                order_item.c.menu_item_id == menu_item_id
-            )
-            existing_item = db.execute(stmt).first()
+            existing_item = db.query(OrderItem).filter(
+                OrderItem.order_id == order_id,
+                OrderItem.menu_item_id == menu_item_id
+            ).first()
             
             if not existing_item:
                 return False
@@ -120,18 +140,11 @@ class OrderController:
             
             if quantity <= 0:
                 # Remove item
-                stmt = order_item.delete().where(
-                    order_item.c.order_id == order_id,
-                    order_item.c.menu_item_id == menu_item_id
-                )
-                db.execute(stmt)
+                db.delete(existing_item)
             else:
                 # Update quantity
-                stmt = order_item.update().where(
-                    order_item.c.order_id == order_id,
-                    order_item.c.menu_item_id == menu_item_id
-                ).values(quantity=quantity, note=note)
-                db.execute(stmt)
+                existing_item.quantity = quantity
+                existing_item.note = note
             
             # Update order total
             order.total_amount += difference
@@ -154,26 +167,23 @@ class OrderController:
             order = db.query(Order).options(
                 joinedload(Order.table),
                 joinedload(Order.staff),
-                joinedload(Order.customer)
+                joinedload(Order.customer),
+                joinedload(Order.order_items).joinedload(OrderItem.menu_item)
             ).filter(Order.id == order_id).first()
             
             if not order:
                 return None
             
-            # Get all items in the order
-            stmt = order_item.select().where(order_item.c.order_id == order_id)
-            order_items = db.execute(stmt).fetchall()
-            
             items_details = []
-            for item in order_items:
-                menu_item = db.query(MenuItem).filter(MenuItem.id == item.menu_item_id).first()
+            for item in order.order_items:
                 items_details.append({
-                    'id': menu_item.id,
-                    'name': menu_item.name,
-                    'price': menu_item.price,
+                    'id': item.menu_item.id,
+                    'name': item.menu_item.name,
+                    'price': item.menu_item.price,
                     'quantity': item.quantity,
                     'note': item.note,
-                    'subtotal': menu_item.price * item.quantity
+                    'status': item.status,
+                    'subtotal': item.menu_item.price * item.quantity
                 })
             
             order_details = {
@@ -209,7 +219,8 @@ class OrderController:
             return db.query(Order).options(
                 joinedload(Order.table),
                 joinedload(Order.staff),
-                joinedload(Order.customer)
+                joinedload(Order.customer),
+                joinedload(Order.order_items)
             ).filter(Order.status != "đã thanh toán").all()
         except SQLAlchemyError as e:
             print(f"Database error: {e}")
@@ -225,7 +236,8 @@ class OrderController:
             return db.query(Order).options(
                 joinedload(Order.table),
                 joinedload(Order.staff),
-                joinedload(Order.customer)
+                joinedload(Order.customer),
+                joinedload(Order.order_items)
             ).filter(
                 Order.table_id == table_id,
                 Order.status != "đã thanh toán"
@@ -237,7 +249,7 @@ class OrderController:
             db.close()
     
     @staticmethod
-    def complete_order(order_id, payment_method, discount=0):
+    def complete_order(order_id, payment_method="tiền mặt", discount=0):
         db = get_db()
         try:
             order = db.query(Order).filter(Order.id == order_id).first()
@@ -317,28 +329,139 @@ class OrderController:
         db = get_db()
         try:
             # Query for popular items
-            stmt = db.query(
+            result = db.query(
                 MenuItem.id,
                 MenuItem.name,
-                func.sum(order_item.c.quantity).label('total_ordered')
+                func.sum(OrderItem.quantity).label('total_ordered')
             ).join(
-                order_item,
-                MenuItem.id == order_item.c.menu_item_id
+                OrderItem,
+                MenuItem.id == OrderItem.menu_item_id
             ).join(
                 Order,
-                Order.id == order_item.c.order_id
+                Order.id == OrderItem.order_id
             ).filter(
                 Order.order_time >= start_date,
                 Order.status == "đã thanh toán"
             ).group_by(
-                MenuItem.id
+                MenuItem.id,
+                MenuItem.name
             ).order_by(
-                func.sum(order_item.c.quantity).desc()
-            ).limit(limit)
+                func.sum(OrderItem.quantity).desc()
+            ).limit(limit).all()
             
-            return stmt.all()
+            return result
         except SQLAlchemyError as e:
             print(f"Database error: {e}")
             return []
+        finally:
+            db.close()
+    
+    @staticmethod
+    def get_active_orders():
+        """Lấy tất cả các đơn hàng đang xử lý"""
+        db = get_db()
+        try:
+            return db.query(Order).options(
+                joinedload(Order.table),
+                joinedload(Order.staff),
+                joinedload(Order.order_items).joinedload(OrderItem.menu_item)
+            ).filter(
+                Order.status.in_(["chờ xử lý", "đang phục vụ"])
+            ).order_by(Order.order_time.desc()).all()
+        except SQLAlchemyError as e:
+            print(f"Database error: {e}")
+            return []
+        finally:
+            db.close()
+    
+    @staticmethod
+    def get_pending_items():
+        """Lấy tất cả các món đang chờ pha chế"""
+        db = get_db()
+        try:
+            # Sử dụng ORM trực tiếp thay vì raw SQL
+            order_items = db.query(OrderItem).join(
+                Order, OrderItem.order_id == Order.id
+            ).join(
+                MenuItem, OrderItem.menu_item_id == MenuItem.id
+            ).filter(
+                Order.status.in_(["chờ xử lý", "đang phục vụ"]),
+                OrderItem.status == "chờ pha chế"
+            ).order_by(Order.order_time.asc()).options(
+                joinedload(OrderItem.menu_item).joinedload(MenuItem.category),
+                joinedload(OrderItem.order).joinedload(Order.table)
+            ).all()
+            
+            return order_items
+        except SQLAlchemyError as e:
+            print(f"Database error: {e}")
+            return []
+        finally:
+            db.close()
+    
+    @staticmethod
+    def complete_order_item(order_item_id, staff_id=None):
+        """Đánh dấu một món đã hoàn thành pha chế"""
+        db = get_db()
+        try:
+            # Tìm order item
+            order_item = db.query(OrderItem).filter(OrderItem.id == order_item_id).first()
+            if not order_item:
+                return False
+                
+            # Cập nhật trạng thái
+            order_item.status = "đã hoàn thành"
+            order_item.completed_by = staff_id
+            order_item.completed_at = datetime.now()
+            
+            db.commit()
+            return True
+        except SQLAlchemyError as e:
+            db.rollback()
+            print(f"Database error: {e}")
+            return False
+        finally:
+            db.close()
+    
+    @staticmethod
+    def get_completed_items_count(staff_id):
+        """Lấy số lượng món đã hoàn thành bởi một nhân viên trong ca làm việc hiện tại"""
+        db = get_db()
+        try:
+            # Lấy số lượng món đã làm trong ngày
+            today = datetime.now().date()
+            start_date = datetime.combine(today, datetime.min.time())
+            end_date = start_date + timedelta(days=1)
+            
+            count = db.query(func.count(OrderItem.id)).filter(
+                OrderItem.status == "đã hoàn thành",
+                OrderItem.completed_by == staff_id,
+                OrderItem.completed_at >= start_date,
+                OrderItem.completed_at < end_date
+            ).scalar() or 0
+            
+            return count
+        except SQLAlchemyError as e:
+            print(f"Database error: {e}")
+            return 0
+        finally:
+            db.close()
+    
+    @staticmethod
+    def update_order_status(order_id, status):
+        """Cập nhật trạng thái của đơn hàng"""
+        db = get_db()
+        try:
+            order = db.query(Order).filter(Order.id == order_id).first()
+            if not order:
+                return False
+            
+            order.status = status
+            db.commit()
+            return True
+        except SQLAlchemyError as e:
+            db.rollback()
+            print(f"Database error: {e}")
+            return False
         finally:
             db.close() 

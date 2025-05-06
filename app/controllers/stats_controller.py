@@ -1,5 +1,5 @@
 from app.database.db_config import get_db
-from app.models.models import Order, MenuItem, order_item, Staff
+from app.models.models import Order, MenuItem, OrderItem, Staff
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func, and_, extract
 from datetime import datetime, timedelta
@@ -47,15 +47,15 @@ class StatsController:
             items = db.query(
                 MenuItem.id,
                 MenuItem.name,
-                func.sum(order_item.c.quantity).label('quantity'),
-                func.sum(MenuItem.price * order_item.c.quantity).label('revenue')
+                func.sum(OrderItem.quantity).label('quantity'),
+                func.sum(MenuItem.price * OrderItem.quantity).label('revenue')
             ).join(
-                order_item,
-                MenuItem.id == order_item.c.menu_item_id
+                OrderItem,
+                MenuItem.id == OrderItem.menu_item_id
             ).join(
                 Order,
                 and_(
-                    Order.id == order_item.c.order_id,
+                    Order.id == OrderItem.order_id,
                     Order.order_time >= start_date,
                     Order.order_time <= end_date,
                     Order.status == "đã thanh toán"
@@ -63,7 +63,7 @@ class StatsController:
             ).group_by(
                 MenuItem.id
             ).order_by(
-                func.sum(order_item.c.quantity).desc()
+                func.sum(OrderItem.quantity).desc()
             ).limit(limit).all()
             
             return items
@@ -165,14 +165,14 @@ class StatsController:
         try:
             category_data = db.query(
                 MenuItem.category_id,
-                func.sum(order_item.c.quantity).label('count')
+                func.sum(OrderItem.quantity).label('count')
             ).join(
-                order_item,
-                MenuItem.id == order_item.c.menu_item_id
+                OrderItem,
+                MenuItem.id == OrderItem.menu_item_id
             ).join(
                 Order,
                 and_(
-                    Order.id == order_item.c.order_id,
+                    Order.id == OrderItem.order_id,
                     Order.order_time >= start_date,
                     Order.order_time <= end_date,
                     Order.status == "đã thanh toán"

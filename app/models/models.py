@@ -3,15 +3,17 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database.db_config import Base
 
-# Bảng trung gian cho hóa đơn và món ăn (chi tiết hóa đơn)
-order_item = Table(
-    "order_item",
-    Base.metadata,
-    Column("order_id", Integer, ForeignKey("orders.id"), primary_key=True),
-    Column("menu_item_id", Integer, ForeignKey("menu_items.id"), primary_key=True),
-    Column("quantity", Integer, default=1),
-    Column("note", String(255), nullable=True),
-)
+# Bảng Recipe để lưu công thức món ăn
+class Recipe(Base):
+    __tablename__ = "recipes"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    menu_item_id = Column(Integer, ForeignKey("menu_items.id"))
+    inventory_id = Column(Integer, ForeignKey("inventories.id"))
+    quantity = Column(Float, nullable=False)  # Số lượng nguyên liệu cần dùng
+    
+    menu_item = relationship("MenuItem", back_populates="ingredients")
+    inventory = relationship("Inventory", back_populates="used_in_recipes")
 
 class MenuCategory(Base):
     __tablename__ = "menu_categories"
@@ -32,9 +34,11 @@ class MenuItem(Base):
     image_path = Column(String(255), nullable=True)
     category_id = Column(Integer, ForeignKey("menu_categories.id"))
     is_available = Column(Boolean, default=True)
+    preparation_time = Column(Integer, default=5)  # Thời gian chuẩn bị (phút)
     
     category = relationship("MenuCategory", back_populates="menu_items")
-    orders = relationship("Order", secondary=order_item, back_populates="menu_items")
+    order_items = relationship("OrderItem", back_populates="menu_item")
+    ingredients = relationship("Recipe", back_populates="menu_item")
 
 class Table(Base):
     __tablename__ = "tables"
@@ -75,6 +79,7 @@ class Customer(Base):
     
     orders = relationship("Order", back_populates="customer")
     reservations = relationship("Reservation", back_populates="customer")
+    feedbacks = relationship("Feedback", back_populates="customer")
 
 class Order(Base):
     __tablename__ = "orders"
@@ -94,7 +99,8 @@ class Order(Base):
     table = relationship("Table", back_populates="orders")
     staff = relationship("Staff", back_populates="orders")
     customer = relationship("Customer", back_populates="orders")
-    menu_items = relationship("MenuItem", secondary=order_item, back_populates="orders")
+    order_items = relationship("OrderItem", back_populates="order")
+    feedbacks = relationship("Feedback", back_populates="order")
 
 class Inventory(Base):
     __tablename__ = "inventories"
@@ -106,6 +112,8 @@ class Inventory(Base):
     supplier = Column(String(100), nullable=True)
     last_update = Column(DateTime, default=datetime.now)
     min_quantity = Column(Float, default=0)  # số lượng tối thiểu cần có
+    
+    used_in_recipes = relationship("Recipe", back_populates="inventory")
 
 class Reservation(Base):
     __tablename__ = "reservations"
@@ -132,4 +140,38 @@ class Shift(Base):
     end_time = Column(DateTime, nullable=False)
     status = Column(String(20), default="lịch")  # lịch, đang làm, đã làm, vắng
     
-    staff = relationship("Staff", back_populates="shifts") 
+    staff = relationship("Staff", back_populates="shifts")
+
+# Chuyển đổi order_item từ Table sang class đầy đủ
+class OrderItem(Base):
+    __tablename__ = "order_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id"))
+    menu_item_id = Column(Integer, ForeignKey("menu_items.id"))
+    quantity = Column(Integer, default=1)
+    note = Column(String(255), nullable=True)
+    status = Column(String(20), default="chờ pha chế")  # chờ pha chế, đang pha chế, đã hoàn thành, hủy
+    created_at = Column(DateTime, default=datetime.now)
+    completed_at = Column(DateTime, nullable=True)
+    completed_by = Column(Integer, ForeignKey("staffs.id"), nullable=True)
+    
+    order = relationship("Order", back_populates="order_items")
+    menu_item = relationship("MenuItem", back_populates="order_items")
+    completed_by_staff = relationship("Staff", foreign_keys=[completed_by])
+
+class Feedback(Base):
+    __tablename__ = "feedbacks"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id"))
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
+    rating = Column(Integer, nullable=False)  # 1-5 sao
+    comment = Column(Text, nullable=True)
+    service_rating = Column(Integer, nullable=True)  # 1-5 sao đánh giá dịch vụ
+    food_rating = Column(Integer, nullable=True)  # 1-5 sao đánh giá món ăn
+    ambience_rating = Column(Integer, nullable=True)  # 1-5 sao đánh giá không khí
+    created_at = Column(DateTime, default=datetime.now)
+    
+    order = relationship("Order")
+    customer = relationship("Customer") 

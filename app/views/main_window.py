@@ -8,6 +8,7 @@ from app.views.table_view import TableView
 from app.views.menu_view import MenuView
 from app.views.order_view import OrderView
 from app.views.staff_view import StaffView
+from app.views.shift_view import ShiftView
 from app.views.stats_view import StatsView
 from app.controllers.staff_controller import StaffController
 
@@ -49,6 +50,22 @@ class MainWindow(QMainWindow):
             user_info.setFont(QFont("Arial", 10))
             user_info.setAlignment(Qt.AlignRight)
             header_layout.addWidget(user_info)
+            
+            # Add logout button
+            logout_btn = QPushButton("Đăng xuất")
+            logout_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #f44336;
+                    color: white;
+                    border-radius: 3px;
+                    padding: 5px;
+                }
+                QPushButton:hover {
+                    background-color: #d32f2f;
+                }
+            """)
+            logout_btn.clicked.connect(self.logout)
+            header_layout.addWidget(logout_btn)
         
         main_layout.addLayout(header_layout)
         
@@ -119,6 +136,15 @@ class MainWindow(QMainWindow):
             # Staff tab
             self.staff_view = StaffView(self.current_staff)
             self.tab_widget.addTab(self.staff_view, "Quản lý nhân viên")
+            
+            # Shift tab
+            self.shift_view = ShiftView(self.current_staff)
+            self.tab_widget.addTab(self.shift_view, "Quản lý ca làm việc")
+            
+            # Inventory tab
+            from app.views.inventory_view import InventoryView
+            self.inventory_view = InventoryView()
+            self.tab_widget.addTab(self.inventory_view, "Quản lý kho")
             
             # Stats tab
             self.stats_view = StatsView()

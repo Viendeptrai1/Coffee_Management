@@ -1,5 +1,5 @@
 from app.database.db_config import engine, get_db
-from app.models.models import Base, MenuItem, MenuCategory, Table, Staff
+from app.models.models import Base, MenuItem, MenuCategory, Table, Staff, Feedback, Shift
 import os
 import hashlib
 

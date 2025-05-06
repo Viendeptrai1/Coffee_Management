@@ -136,8 +136,16 @@ class LoginView(QWidget):
         if staff:
             # Login successful
             self.hide()
-            from app.views.main_window import MainWindow
-            self.main_window = MainWindow(staff)
+            if staff.role == "Pha chế":
+                from app.views.barista_window import BaristaWindow
+                self.main_window = BaristaWindow(staff)
+            elif staff.role == "Thu ngân":
+                from app.views.cashier_window import CashierWindow  
+                self.main_window = CashierWindow(staff)
+            else:
+                from app.views.main_window import MainWindow
+                self.main_window = MainWindow(staff)
+            
             self.main_window.show()
         else:
             # Login failed

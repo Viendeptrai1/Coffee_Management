@@ -2,13 +2,15 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
                              QComboBox, QLineEdit, QDialog, QSpinBox, QGroupBox,
                              QMessageBox, QSplitter, QTabWidget, QTreeWidget, QTreeWidgetItem,
-                             QFormLayout, QDoubleSpinBox, QTextEdit, QFrame)
+                             QFormLayout, QDoubleSpinBox, QTextEdit, QFrame, QSlider,
+                             QRadioButton, QButtonGroup)
 from PyQt5.QtCore import Qt, QSize, pyqtSignal
 from PyQt5.QtGui import QIcon, QFont, QColor, QPixmap
 
 from app.controllers.order_controller import OrderController
 from app.controllers.table_controller import TableController
 from app.controllers.menu_controller import MenuController
+from app.controllers.feedback_controller import FeedbackController
 from datetime import datetime
 
 class OrderView(QWidget):
@@ -630,10 +632,201 @@ class OrderView(QWidget):
                 QMessageBox.information(self, "Thành công", 
                                      f"Đơn hàng #{self.selected_order_id} đã được thanh toán")
                 
+                # Show feedback dialog
+                self.show_feedback_dialog(self.selected_order_id)
+                
                 # Reload orders
                 self.load_orders()
             else:
                 QMessageBox.warning(self, "Lỗi", "Không thể hoàn tất thanh toán")
+    
+    def show_feedback_dialog(self, order_id):
+        """Hiển thị cửa sổ đánh giá sau khi thanh toán"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Đánh giá trải nghiệm")
+        dialog.setFixedSize(500, 600)
+        dialog.setStyleSheet("""
+            QDialog {
+                background-color: #f8f9fa;
+            }
+            QGroupBox {
+                font-weight: bold;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                margin-top: 10px;
+                background-color: white;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+            QLabel#thankyou {
+                font-size: 16px;
+                font-weight: bold;
+                color: #4CAF50;
+            }
+            QRadioButton {
+                font-size: 14px;
+            }
+            QPushButton#submit {
+                background-color: #4CAF50;
+                color: white;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-weight: bold;
+            }
+            QPushButton#submit:hover {
+                background-color: #45a049;
+            }
+            QPushButton#skip {
+                background-color: #f1f1f1;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                padding: 8px 16px;
+            }
+            QPushButton#skip:hover {
+                background-color: #e1e1e1;
+            }
+        """)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Tiêu đề và lời cảm ơn
+        thank_you = QLabel("Cảm ơn quý khách đã sử dụng dịch vụ của chúng tôi!")
+        thank_you.setObjectName("thankyou")
+        thank_you.setAlignment(Qt.AlignCenter)
+        layout.addWidget(thank_you)
+        
+        layout.addWidget(QLabel("Vui lòng dành chút thời gian đánh giá trải nghiệm của quý khách:"))
+        layout.addSpacing(10)
+        
+        # Đánh giá tổng thể
+        overall_group = QGroupBox("Đánh giá tổng thể")
+        overall_layout = QVBoxLayout(overall_group)
+        
+        overall_rating = QButtonGroup(dialog)
+        rating_layout = QHBoxLayout()
+        
+        for i in range(1, 6):
+            radio = QRadioButton(str(i))
+            overall_rating.addButton(radio, i)
+            rating_layout.addWidget(radio)
+            if i == 5:  # Mặc định chọn 5 sao
+                radio.setChecked(True)
+        
+        rating_label_layout = QHBoxLayout()
+        rating_label_layout.addWidget(QLabel("Không hài lòng"))
+        rating_label_layout.addStretch()
+        rating_label_layout.addWidget(QLabel("Rất hài lòng"))
+        
+        overall_layout.addLayout(rating_layout)
+        overall_layout.addLayout(rating_label_layout)
+        layout.addWidget(overall_group)
+        
+        # Đánh giá chi tiết
+        details_group = QGroupBox("Đánh giá chi tiết")
+        details_layout = QVBoxLayout(details_group)
+        
+        # Đánh giá món ăn
+        food_layout = QHBoxLayout()
+        food_layout.addWidget(QLabel("Chất lượng món:"))
+        food_rating = QSlider(Qt.Horizontal)
+        food_rating.setRange(1, 5)
+        food_rating.setValue(5)
+        food_rating.setTickPosition(QSlider.TicksBelow)
+        food_rating.setTickInterval(1)
+        food_layout.addWidget(food_rating)
+        food_value = QLabel("5")
+        food_layout.addWidget(food_value)
+        
+        # Cập nhật giá trị khi kéo slider
+        def update_food_value(value):
+            food_value.setText(str(value))
+        food_rating.valueChanged.connect(update_food_value)
+        
+        # Đánh giá dịch vụ
+        service_layout = QHBoxLayout()
+        service_layout.addWidget(QLabel("Chất lượng dịch vụ:"))
+        service_rating = QSlider(Qt.Horizontal)
+        service_rating.setRange(1, 5)
+        service_rating.setValue(5)
+        service_rating.setTickPosition(QSlider.TicksBelow)
+        service_rating.setTickInterval(1)
+        service_layout.addWidget(service_rating)
+        service_value = QLabel("5")
+        service_layout.addWidget(service_value)
+        
+        def update_service_value(value):
+            service_value.setText(str(value))
+        service_rating.valueChanged.connect(update_service_value)
+        
+        # Đánh giá không khí
+        ambience_layout = QHBoxLayout()
+        ambience_layout.addWidget(QLabel("Không gian/môi trường:"))
+        ambience_rating = QSlider(Qt.Horizontal)
+        ambience_rating.setRange(1, 5)
+        ambience_rating.setValue(5)
+        ambience_rating.setTickPosition(QSlider.TicksBelow)
+        ambience_rating.setTickInterval(1)
+        ambience_layout.addWidget(ambience_rating)
+        ambience_value = QLabel("5")
+        ambience_layout.addWidget(ambience_value)
+        
+        def update_ambience_value(value):
+            ambience_value.setText(str(value))
+        ambience_rating.valueChanged.connect(update_ambience_value)
+        
+        details_layout.addLayout(food_layout)
+        details_layout.addLayout(service_layout)
+        details_layout.addLayout(ambience_layout)
+        
+        layout.addWidget(details_group)
+        
+        # Góp ý
+        comment_group = QGroupBox("Góp ý thêm")
+        comment_layout = QVBoxLayout(comment_group)
+        comment_input = QTextEdit()
+        comment_input.setPlaceholderText("Nhập góp ý của quý khách tại đây...")
+        comment_layout.addWidget(comment_input)
+        layout.addWidget(comment_group)
+        
+        # Nút điều khiển
+        buttons_layout = QHBoxLayout()
+        
+        skip_button = QPushButton("Bỏ qua")
+        skip_button.setObjectName("skip")
+        skip_button.clicked.connect(dialog.reject)
+        
+        submit_button = QPushButton("Gửi đánh giá")
+        submit_button.setObjectName("submit")
+        submit_button.clicked.connect(dialog.accept)
+        
+        buttons_layout.addWidget(skip_button)
+        buttons_layout.addStretch()
+        buttons_layout.addWidget(submit_button)
+        
+        layout.addLayout(buttons_layout)
+        
+        if dialog.exec_() == QDialog.Accepted:
+            # Thu thập dữ liệu đánh giá
+            rating = overall_rating.checkedId()
+            food = food_rating.value()
+            service = service_rating.value()
+            ambience = ambience_rating.value()
+            comment = comment_input.toPlainText().strip() or None
+            
+            # Lưu đánh giá vào cơ sở dữ liệu
+            FeedbackController.add_feedback(
+                order_id=order_id,
+                rating=rating,
+                comment=comment,
+                service_rating=service,
+                food_rating=food,
+                ambience_rating=ambience
+            )
+            
+            QMessageBox.information(self, "Cảm ơn", "Cảm ơn quý khách đã đánh giá!")
     
     def cancel_order(self):
         if not self.selected_order_id:

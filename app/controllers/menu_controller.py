@@ -124,4 +124,9 @@ class MenuController:
             print(f"Database error: {e}")
             return False
         finally:
-            db.close() 
+            db.close()
+    
+    @staticmethod
+    def get_all_menu_items():
+        """Alias của get_all_items() để tương thích với code hiện tại"""
+        return MenuController.get_all_items() 

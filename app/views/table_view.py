@@ -113,7 +113,7 @@ class CafeScene(QGraphicsScene):
         garden.setPen(QPen(Qt.black, 2))
         self.addItem(garden)
         garden_text = QGraphicsTextItem("SÂN VƯỜN")
-        garden_text.setPos(200, 450)
+        garden_text.setPos(200, 380)  # Di chuyển ra ngoài khu vực bàn
         garden_text.setDefaultTextColor(Qt.black)
         garden_text.setFont(QFont("Arial", 12, QFont.Bold))
         self.addItem(garden_text)
@@ -124,7 +124,7 @@ class CafeScene(QGraphicsScene):
         window_area.setPen(QPen(Qt.black, 2))
         self.addItem(window_area)
         window_text = QGraphicsTextItem("CỬA SỔ")
-        window_text.setPos(80, 180)
+        window_text.setPos(10, 180)  # Di chuyển ra ngoài khu vực bàn
         window_text.setDefaultTextColor(Qt.black)
         window_text.setFont(QFont("Arial", 10, QFont.Bold))
         self.addItem(window_text)
@@ -135,7 +135,7 @@ class CafeScene(QGraphicsScene):
         center_area.setPen(QPen(Qt.black, 2))
         self.addItem(center_area)
         center_text = QGraphicsTextItem("KHU VỰC GIỮA")
-        center_text.setPos(310, 240)
+        center_text.setPos(310, 130)  # Di chuyển ra ngoài khu vực bàn
         center_text.setDefaultTextColor(Qt.black)
         center_text.setFont(QFont("Arial", 10, QFont.Bold))
         self.addItem(center_text)
@@ -146,7 +146,7 @@ class CafeScene(QGraphicsScene):
         corner_area.setPen(QPen(Qt.black, 2))
         self.addItem(corner_area)
         corner_text = QGraphicsTextItem("GÓC")
-        corner_text.setPos(655, 360)
+        corner_text.setPos(655, 180)  # Di chuyển ra ngoài khu vực bàn
         corner_text.setDefaultTextColor(Qt.black)
         corner_text.setFont(QFont("Arial", 10, QFont.Bold))
         self.addItem(corner_text)
@@ -170,9 +170,9 @@ class CafeScene(QGraphicsScene):
         # Định vị trí đặt bàn dựa trên location và id
         if location == "Cửa sổ":
             if table_id % 2 == 0:
-                return 70, 70 + (table_id // 2) * 120
+                return 70, 70 + (table_id // 2) * 150  # Tăng khoảng cách giữa các bàn
             else:
-                return 70, 130 + (table_id // 2) * 120
+                return 70, 130 + (table_id // 2) * 150  # Tăng khoảng cách tương ứng
         elif location == "Giữa":
             offset = table_id - 3  # Bàn 3 và 4 thuộc khu vực giữa
             col = offset % 2
@@ -184,7 +184,9 @@ class CafeScene(QGraphicsScene):
         elif location == "Sân vườn":
             offset = table_id - 7  # Bàn 7 và 8 thuộc khu vực sân vườn
             col = offset % 2
-            return 100 + col * 250, 430
+            row = offset // 2
+            # Hiệu chỉnh vị trí để đảm bảo bàn nằm trong khu vực sân vườn
+            return 100 + col * 200, 430 + row * 80
         else:
             # Mặc định nếu không rơi vào các khu vực trên
             return 350, 300
@@ -221,12 +223,19 @@ class TableView(QWidget):
         add_table_button.setFixedSize(100, 30)
         add_table_button.clicked.connect(self.show_add_table_dialog)
         
+        # Nút tạo đơn online
+        online_order_button = QPushButton("Đơn Online")
+        online_order_button.setFixedSize(100, 30)
+        online_order_button.setStyleSheet("background-color: #2196F3; color: white;")
+        online_order_button.clicked.connect(self.create_online_order)
+        
         # Only enable add button for managers
         if self.current_staff and self.current_staff.role != "Quản lý":
             add_table_button.setEnabled(False)
         
         header_layout.addWidget(title_label)
         header_layout.addStretch()
+        header_layout.addWidget(online_order_button)
         header_layout.addWidget(refresh_button)
         header_layout.addWidget(add_table_button)
         
@@ -423,4 +432,84 @@ class TableView(QWidget):
                 QMessageBox.information(self, "Thành công", f"Đã thêm bàn {name}")
                 self.load_tables()
             else:
-                QMessageBox.warning(self, "Lỗi", "Không thể thêm bàn mới") 
+                QMessageBox.warning(self, "Lỗi", "Không thể thêm bàn mới")
+    
+    def create_online_order(self):
+        """Tạo đơn hàng online (không gắn với bàn cụ thể)"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Tạo đơn hàng online")
+        dialog.setFixedSize(400, 250)
+        
+        layout = QVBoxLayout(dialog)
+        
+        layout.addWidget(QLabel("<b>Thông tin đơn hàng online</b>"))
+        layout.addSpacing(10)
+        
+        # Thông tin khách hàng
+        form_layout = QVBoxLayout()
+        
+        # Tên khách hàng
+        form_layout.addWidget(QLabel("Tên khách hàng:"))
+        customer_name = QLineEdit()
+        customer_name.setPlaceholderText("Nhập tên khách hàng")
+        form_layout.addWidget(customer_name)
+        
+        # Số điện thoại
+        form_layout.addWidget(QLabel("Số điện thoại:"))
+        phone_number = QLineEdit()
+        phone_number.setPlaceholderText("Nhập số điện thoại")
+        form_layout.addWidget(phone_number)
+        
+        # Loại đơn hàng
+        form_layout.addWidget(QLabel("Loại đơn hàng:"))
+        order_type = QComboBox()
+        order_type.addItems(["Mang đi", "Giao hàng"])
+        form_layout.addWidget(order_type)
+        
+        layout.addLayout(form_layout)
+        layout.addSpacing(20)
+        
+        # Nút bấm
+        buttons_layout = QHBoxLayout()
+        
+        cancel_button = QPushButton("Hủy")
+        cancel_button.clicked.connect(dialog.reject)
+        
+        confirm_button = QPushButton("Tạo đơn hàng")
+        confirm_button.setStyleSheet("background-color: #4CAF50; color: white;")
+        confirm_button.clicked.connect(dialog.accept)
+        
+        buttons_layout.addWidget(cancel_button)
+        buttons_layout.addWidget(confirm_button)
+        
+        layout.addLayout(buttons_layout)
+        
+        if dialog.exec_() == QDialog.Accepted:
+            name = customer_name.text().strip()
+            phone = phone_number.text().strip()
+            type_order = order_type.currentText()
+            
+            if not name or not phone:
+                QMessageBox.warning(self, "Lỗi", "Vui lòng nhập đầy đủ thông tin khách hàng")
+                return
+            
+            # Tạo đơn hàng online
+            if self.current_staff:
+                # Gọi tới controller để tạo đơn online
+                order_id = OrderController.create_online_order(
+                    staff_id=self.current_staff.id,
+                    customer_name=name,
+                    phone_number=phone,
+                    order_type=type_order
+                )
+                
+                if order_id:
+                    QMessageBox.information(self, "Thành công", 
+                                        f"Đã tạo đơn hàng online cho khách hàng {name}")
+                    
+                    # Chuyển sang tab quản lý đơn hàng
+                    self.parent().parent().setCurrentIndex(2)  # Index của tab quản lý đơn hàng
+                else:
+                    QMessageBox.warning(self, "Lỗi", "Không thể tạo đơn hàng online")
+            else:
+                QMessageBox.warning(self, "Lỗi", "Bạn chưa đăng nhập") 
