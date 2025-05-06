@@ -2,7 +2,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
                              QDialog, QFormLayout, QLineEdit, QComboBox, QMessageBox,
                              QDateEdit, QTimeEdit, QCalendarWidget, QTabWidget, QScrollArea,
-                             QGridLayout, QFrame, QSplitter, QMenu, QGroupBox)
+                             QGridLayout, QFrame, QSplitter, QMenu, QGroupBox, QSpinBox)
 from PyQt5.QtCore import Qt, QSize, QDate, QTime, QDateTime
 from PyQt5.QtGui import QIcon, QFont, QColor, QBrush
 
@@ -441,9 +441,20 @@ class ShiftView(QWidget):
         date_nav_layout.addWidget(self.next_week_btn)
         date_nav_layout.addWidget(self.today_btn)
         
+        # Thêm nút tạo lịch tự động
+        self.auto_schedule_btn = QPushButton("Tạo lịch tự động")
+        self.auto_schedule_btn.setStyleSheet("background-color: #4CAF50; color: white;")
+        self.auto_schedule_btn.clicked.connect(self.show_auto_schedule_dialog)
+        
+        # Thêm nút xem khối lượng công việc
+        self.workload_btn = QPushButton("Xem khối lượng công việc")
+        self.workload_btn.clicked.connect(self.show_workload_dialog)
+        
         header_layout.addWidget(title_label)
         header_layout.addStretch()
         header_layout.addLayout(date_nav_layout)
+        header_layout.addWidget(self.auto_schedule_btn)
+        header_layout.addWidget(self.workload_btn)
         
         # Add header to main layout
         main_layout.addLayout(header_layout)
@@ -478,4 +489,176 @@ class ShiftView(QWidget):
     
     def refresh(self):
         self.shift_table.update_table()
-        self.update_week_label() 
+        self.update_week_label()
+        
+    def show_auto_schedule_dialog(self):
+        """Hiển thị dialog cấu hình tạo lịch tự động"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Tạo lịch tự động")
+        dialog.setFixedWidth(400)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Thông báo
+        info_label = QLabel("Lưu ý: Tất cả ca làm việc hiện tại trong tuần này sẽ bị xóa!")
+        info_label.setStyleSheet("color: red;")
+        layout.addWidget(info_label)
+        
+        form_layout = QFormLayout()
+        
+        # Số nhân viên tối thiểu mỗi ngày
+        min_staff_spin = QSpinBox()
+        min_staff_spin.setMinimum(1)
+        min_staff_spin.setMaximum(10)
+        min_staff_spin.setValue(2)
+        form_layout.addRow("Số nhân viên tối thiểu mỗi ngày:", min_staff_spin)
+        
+        # Số ca tối đa mỗi nhân viên một tuần
+        max_shifts_spin = QSpinBox()
+        max_shifts_spin.setMinimum(1)
+        max_shifts_spin.setMaximum(7)
+        max_shifts_spin.setValue(5)
+        form_layout.addRow("Số ca tối đa mỗi nhân viên một tuần:", max_shifts_spin)
+        
+        layout.addLayout(form_layout)
+        
+        # Buttons
+        buttons_layout = QHBoxLayout()
+        
+        cancel_button = QPushButton("Hủy")
+        cancel_button.clicked.connect(dialog.reject)
+        
+        generate_button = QPushButton("Tạo lịch")
+        generate_button.setStyleSheet("background-color: #4CAF50; color: white;")
+        generate_button.clicked.connect(dialog.accept)
+        
+        buttons_layout.addWidget(cancel_button)
+        buttons_layout.addWidget(generate_button)
+        
+        layout.addLayout(buttons_layout)
+        
+        if dialog.exec_() == QDialog.Accepted:
+            min_staff = min_staff_spin.value()
+            max_shifts = max_shifts_spin.value()
+            
+            # Xác nhận một lần nữa
+            reply = QMessageBox.question(
+                self,
+                "Xác nhận tạo lịch tự động",
+                "Tất cả ca làm việc hiện tại trong tuần này sẽ bị xóa. Bạn có chắc chắn muốn tiếp tục?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            
+            if reply == QMessageBox.Yes:
+                # Thay đổi cách hiển thị thông báo đang xử lý
+                from PyQt5.QtWidgets import QApplication
+                from PyQt5.QtCore import QTimer
+                
+                # Thiết lập con trỏ chờ
+                QApplication.setOverrideCursor(Qt.WaitCursor)
+                
+                # Cập nhật status bar nếu có
+                if hasattr(self, 'parentWidget') and hasattr(self.parentWidget(), 'statusBar'):
+                    self.parentWidget().statusBar().showMessage("Đang tạo lịch làm việc tự động...")
+                
+                # Thực hiện tạo lịch tự động
+                success, message = ShiftController.generate_automatic_schedule(
+                    self.shift_table.week_start_date,
+                    min_staff,
+                    max_shifts
+                )
+                
+                # Khôi phục con trỏ
+                QApplication.restoreOverrideCursor()
+                
+                # Xóa thông báo từ status bar
+                if hasattr(self, 'parentWidget') and hasattr(self.parentWidget(), 'statusBar'):
+                    self.parentWidget().statusBar().clearMessage()
+                
+                if success:
+                    QMessageBox.information(self, "Thành công", message)
+                    self.refresh()
+                else:
+                    QMessageBox.warning(self, "Lỗi", message)
+    
+    def show_workload_dialog(self):
+        """Hiển thị khối lượng công việc của nhân viên trong tuần"""
+        workloads = ShiftController.get_staff_workload(self.shift_table.week_start_date)
+        
+        if not workloads:
+            QMessageBox.information(self, "Thông báo", "Không có dữ liệu khối lượng công việc trong tuần này.")
+            return
+            
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Khối lượng công việc (Tuần {self.current_week_label.text()})")
+        dialog.setFixedSize(500, 400)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Tạo bảng khối lượng công việc
+        workload_table = QTableWidget()
+        workload_table.setColumnCount(4)
+        workload_table.setHorizontalHeaderLabels(["Nhân viên", "Số ca", "Tổng giờ", "Tỷ lệ"])
+        workload_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        workload_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        workload_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        workload_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        workload_table.verticalHeader().setVisible(False)
+        workload_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        
+        # Tính tổng số giờ làm việc
+        total_hours = sum(item['total_hours'] for item in workloads)
+        
+        # Thêm dữ liệu vào bảng
+        workload_table.setRowCount(len(workloads))
+        for i, item in enumerate(workloads):
+            # Nhân viên
+            name_item = QTableWidgetItem(item['staff_name'])
+            workload_table.setItem(i, 0, name_item)
+            
+            # Số ca
+            shift_count_item = QTableWidgetItem(str(item['shift_count']))
+            shift_count_item.setTextAlignment(Qt.AlignCenter)
+            workload_table.setItem(i, 1, shift_count_item)
+            
+            # Tổng giờ
+            hours_item = QTableWidgetItem(f"{item['total_hours']} giờ")
+            hours_item.setTextAlignment(Qt.AlignCenter)
+            workload_table.setItem(i, 2, hours_item)
+            
+            # Tỷ lệ phần trăm
+            percentage = round(item['total_hours'] / total_hours * 100, 1) if total_hours > 0 else 0
+            percentage_item = QTableWidgetItem(f"{percentage}%")
+            percentage_item.setTextAlignment(Qt.AlignCenter)
+            
+            # Màu nền dựa trên tỷ lệ
+            if percentage > 25:  # Khối lượng cao
+                percentage_item.setBackground(QColor("#ffcccb"))  # Đỏ nhạt
+            elif percentage < 10:  # Khối lượng thấp
+                percentage_item.setBackground(QColor("#d4edda"))  # Xanh lá nhạt
+                
+            workload_table.setItem(i, 3, percentage_item)
+        
+        layout.addWidget(workload_table)
+        
+        # Thêm thông tin tổng hợp
+        summary_frame = QFrame()
+        summary_frame.setFrameShape(QFrame.StyledPanel)
+        summary_layout = QHBoxLayout(summary_frame)
+        
+        total_staff = len(workloads)
+        total_shifts = sum(item['shift_count'] for item in workloads)
+        
+        summary_layout.addWidget(QLabel(f"Tổng nhân viên: {total_staff}"))
+        summary_layout.addWidget(QLabel(f"Tổng ca làm việc: {total_shifts}"))
+        summary_layout.addWidget(QLabel(f"Tổng giờ làm việc: {total_hours} giờ"))
+        
+        layout.addWidget(summary_frame)
+        
+        # Nút đóng
+        close_button = QPushButton("Đóng")
+        close_button.clicked.connect(dialog.accept)
+        layout.addWidget(close_button)
+        
+        dialog.exec_() 

@@ -1,0 +1,1 @@
+"""Utilities for the Coffee Management application.""" 
